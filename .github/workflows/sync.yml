@@ -1,0 +1,75 @@
+name: Sync island sharecfg files
+
+on:
+  schedule:
+    # Runs daily at 03:00 UTC — adjust as you like
+    - cron: '0 3 * * *'
+  workflow_dispatch: {}   # lets you trigger it manually from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout destination repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Sparse-clone only the sharecfg folders from the source repo
+        run: |
+          set -euo pipefail
+          SERVERS=(CN EN TW KR JP)
+
+          git clone --filter=blob:none --no-checkout --depth=1 \
+            https://github.com/AzurLaneTools/AzurLaneLuaScripts.git source-repo
+          cd source-repo
+          git sparse-checkout init --cone
+          # Register only the sharecfg subfolder of each server
+          git sparse-checkout set "${SERVERS[@]/%//sharecfg}"
+          git checkout main
+          cd ..
+
+      - name: Copy island* files into destination folders
+        run: |
+          set -euo pipefail
+          SERVERS=(CN EN TW KR JP)
+          CHANGED=0
+
+          for SERVER in "${SERVERS[@]}"; do
+            SRC_DIR="source-repo/${SERVER}/sharecfg"
+            DEST_DIR="${SERVER}/sharecfg"
+
+            if [ ! -d "$SRC_DIR" ]; then
+              echo "::warning::Source folder $SRC_DIR not found, skipping $SERVER"
+              continue
+            fi
+
+            mkdir -p "$DEST_DIR"
+
+            # Copy only files that start with 'island' (case-sensitive; adjust -iname if needed)
+            find "$SRC_DIR" -maxdepth 1 -type f -name 'island*' -print0 \
+              | xargs -0 -I{} cp -f {} "$DEST_DIR"/
+
+            echo "Synced $(find "$SRC_DIR" -maxdepth 1 -type f -name 'island*' | wc -l) file(s) for $SERVER"
+          done
+
+      - name: Clean up source clone
+        run: rm -rf source-repo
+
+      - name: Commit and push if there are changes
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add CN/sharecfg EN/sharecfg TW/sharecfg KR/sharecfg JP/sharecfg
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Sync island sharecfg files from AzurLaneLuaScripts ($(date -u +%Y-%m-%d))"
+            git push
+          fi
