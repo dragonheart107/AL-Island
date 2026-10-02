@@ -49,7 +49,7 @@ jobs:
             mkdir -p "$DEST_DIR"
 
             # Copy only files that start with 'island' (case-sensitive; adjust -iname if needed)
-            find "$SRC_DIR" -maxdepth 1 -type f -name 'island*' -print0 \
+            find "$SRC_DIR" -maxdepth 1 -type f \( -name 'island*' -o -name 'activity_template.lua' \) -print0 \
               | xargs -0 -I{} cp -f {} "$DEST_DIR"/
 
             echo "Synced $(find "$SRC_DIR" -maxdepth 1 -type f -name 'island*' | wc -l) file(s) for $SERVER"
